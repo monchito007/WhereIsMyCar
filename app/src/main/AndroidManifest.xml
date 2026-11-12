@@ -14,6 +14,11 @@
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Aparcamiento automático: en Android 11 o anterior, el trabajo urgente de WorkManager
+         se ejecuta como servicio en primer plano -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE"
+        android:maxSdkVersion="30" />
 
     <uses-feature
         android:name="android.hardware.bluetooth"

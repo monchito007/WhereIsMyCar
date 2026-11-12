@@ -2,7 +2,9 @@ package com.monchito007.whereismycar.ui
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.net.Uri
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -43,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -199,6 +202,71 @@ fun AutoParkSettingsScreen(
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+            }
+
+            // --- Batería (recomendado) ---
+            val ignoringBatteryOptimizations = remember(permissionsVersion) {
+                context.getSystemService(PowerManager::class.java)
+                    ?.isIgnoringBatteryOptimizations(context.packageName) == true
+            }
+            SettingsCard(title = stringResource(R.string.auto_park_battery_title)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (ignoringBatteryOptimizations) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = if (ignoringBatteryOptimizations) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.tertiary
+                        },
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        stringResource(
+                            if (ignoringBatteryOptimizations) {
+                                R.string.auto_park_battery_ok
+                            } else {
+                                R.string.auto_park_battery_restricted
+                            },
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (!ignoringBatteryOptimizations) {
+                    TextButton(onClick = {
+                        context.startActivity(
+                            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }) { Text(stringResource(R.string.auto_park_battery_open)) }
+                }
+            }
+
+            // --- Registro de actividad (diagnóstico) ---
+            val logEntries by viewModel.logEntries.collectAsStateWithLifecycle()
+            SettingsCard(title = stringResource(R.string.auto_park_log_title)) {
+                Text(stringResource(R.string.auto_park_log_hint), style = MaterialTheme.typography.bodySmall)
+                if (logEntries.isEmpty()) {
+                    Text(stringResource(R.string.auto_park_log_empty), style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    logEntries.forEach { entry ->
+                        Text(entry, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                    }
+                    TextButton(onClick = viewModel::clearLog) { Text(stringResource(R.string.auto_park_log_clear)) }
+                }
+                // Solo en versiones de prueba (instaladas desde Android Studio)
+                val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                if (isDebuggable) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(onClick = viewModel::simulateDisconnect) {
+                            Text(stringResource(R.string.auto_park_simulate_disconnect))
+                        }
+                        FilledTonalButton(onClick = viewModel::simulateReconnect) {
+                            Text(stringResource(R.string.auto_park_simulate_reconnect))
+                        }
+                    }
                 }
             }
         }

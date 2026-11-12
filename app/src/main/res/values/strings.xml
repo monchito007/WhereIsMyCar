@@ -84,4 +84,14 @@
     <string name="auto_park_switch_label">Guardar cuando \"%1$s\" se desconecte</string>
     <string name="auto_park_choose_car_first">Primero elige tu coche</string>
     <string name="auto_park_missing_permissions">Faltan permisos: el aparcamiento automático no funcionará hasta que los concedas.</string>
+    <string name="auto_park_battery_title">Batería (recomendado)</string>
+    <string name="auto_park_battery_ok">La app no tiene restricciones de batería.</string>
+    <string name="auto_park_battery_restricted">El ahorro de batería puede retrasar o impedir el guardado con la app cerrada. Elige \"Sin restricciones\" para WhereIsMyCar.</string>
+    <string name="auto_park_battery_open">Abrir ajustes de batería</string>
+    <string name="auto_park_log_title">Registro de actividad</string>
+    <string name="auto_park_log_hint">Conexiones y desconexiones Bluetooth recibidas y qué ha hecho la app. Útil si algo no funciona.</string>
+    <string name="auto_park_log_empty">Todavía no hay actividad.</string>
+    <string name="auto_park_log_clear">Borrar registro</string>
+    <string name="auto_park_simulate_disconnect">Simular desconexión</string>
+    <string name="auto_park_simulate_reconnect">Simular reconexión</string>
 </resources>

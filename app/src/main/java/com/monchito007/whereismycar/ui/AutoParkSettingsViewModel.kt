@@ -6,7 +6,9 @@ import android.bluetooth.BluetoothManager
 import androidx.core.content.getSystemService
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.monchito007.whereismycar.bluetooth.AutoParkLog
 import com.monchito007.whereismycar.bluetooth.AutoParkPermissions
+import com.monchito007.whereismycar.worker.AutoParkScheduler
 import com.monchito007.whereismycar.bluetooth.CarBluetoothConfig
 import com.monchito007.whereismycar.bluetooth.CarDeviceSettings
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -56,6 +58,36 @@ class AutoParkSettingsViewModel(application: Application) : AndroidViewModel(app
     }
 
     fun setEnabled(enabled: Boolean) {
-        viewModelScope.launch { settings.setEnabled(enabled) }
+        viewModelScope.launch {
+            settings.setEnabled(enabled)
+            log.add(if (enabled) "Aparcamiento automático activado" else "Aparcamiento automático desactivado")
+        }
+    }
+
+    // --- Registro de actividad ---
+
+    private val log = AutoParkLog(application)
+
+    val logEntries: StateFlow<List<String>> = log.entries
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun clearLog() {
+        viewModelScope.launch { log.clear() }
+    }
+
+    /** Solo en versiones de prueba: simula que el coche se desconecta, sin Bluetooth real. */
+    fun simulateDisconnect() {
+        viewModelScope.launch {
+            log.add("SIMULACIÓN: desconexión del coche")
+            AutoParkScheduler.schedule(getApplication(), disconnectedAt = System.currentTimeMillis())
+        }
+    }
+
+    /** Solo en versiones de prueba: simula que el coche se vuelve a conectar. */
+    fun simulateReconnect() {
+        viewModelScope.launch {
+            log.add("SIMULACIÓN: reconexión del coche → se cancela cualquier guardado pendiente")
+            AutoParkScheduler.cancel(getApplication())
+        }
     }
 }

@@ -1,76 +1,141 @@
 package com.monchito007.whereismycar.worker
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
-import android.util.Log
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.monchito007.whereismycar.WhereIsMyCarApp
+import com.monchito007.whereismycar.bluetooth.AutoParkLog
 import com.monchito007.whereismycar.bluetooth.AutoParkPermissions
 import com.monchito007.whereismycar.location.currentLocationOnce
-import kotlinx.coroutines.delay
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.cancellation.CancellationException
 
-/**
- * Se lanza al desconectarse el coche:
- * 1. Obtiene la ubicación en ese momento (sigues junto al coche).
- * 2. Espera [DEBOUNCE_MS]. Si el coche se reconecta antes, el trabajo se cancela
- *    (microcorte en marcha o apagar/encender rápido) y no se guarda nada.
- * 3. Guarda la ubicación como aparcamiento actual. El anterior pasa al historial,
- *    igual que al aparcar a mano.
+/*
+ * Aparcamiento automático en dos pasos encadenados (un único trabajo "único" de WorkManager):
+ *
+ * 1. AutoParkLocationWorker (urgente/expedited): obtiene la ubicación justo al desconectarse,
+ *    cuando aún estás junto al coche.
+ * 2. AutoParkSaveWorker (con 60 s de retraso): guarda esa ubicación como aparcamiento.
+ *
+ * Si el coche se reconecta antes de que termine la espera, AutoParkScheduler.cancel() cancela la
+ * cadena y no se guarda nada (microcorte en marcha o apagar/encender rápido).
  */
-class AutoParkWorker(
+
+private const val KEY_DISCONNECTED_AT = "disconnected_at"
+private const val KEY_LATITUDE = "latitude"
+private const val KEY_LONGITUDE = "longitude"
+private const val KEY_ACCURACY = "accuracy"
+
+class AutoParkLocationWorker(
     appContext: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
-        val context = applicationContext
-        if (!AutoParkPermissions.hasBackgroundLocation(context)) {
-            Log.w(TAG, "Sin permiso de ubicación en segundo plano: no se guarda")
-            return Result.failure()
+        val log = AutoParkLog(applicationContext)
+        try {
+            log.add("Obteniendo ubicación…")
+            if (!AutoParkPermissions.hasBackgroundLocation(applicationContext)) {
+                log.add("ERROR: falta el permiso de ubicación \"Permitir todo el tiempo\"")
+                return Result.failure()
+            }
+            val location = currentLocationOnce(applicationContext, LOCATION_TIMEOUT_MS)
+            if (location == null) {
+                log.add("ERROR: no se pudo obtener la ubicación (¿GPS desactivado?)")
+                return Result.failure()
+            }
+            val accuracy = location.accuracyMeters?.let { "±${it.toInt()} m" } ?: "precisión desconocida"
+            log.add("Ubicación obtenida ($accuracy). Se guardará en ${SAVE_DELAY_SECONDS} s si el coche no se reconecta")
+            return Result.success(
+                workDataOf(
+                    KEY_DISCONNECTED_AT to inputData.getLong(KEY_DISCONNECTED_AT, System.currentTimeMillis()),
+                    KEY_LATITUDE to location.latitude,
+                    KEY_LONGITUDE to location.longitude,
+                    KEY_ACCURACY to (location.accuracyMeters ?: -1f),
+                ),
+            )
+        } catch (e: CancellationException) {
+            log.add("Cancelado mientras se obtenía la ubicación")
+            throw e
         }
-
-        val disconnectedAt = inputData.getLong(KEY_DISCONNECTED_AT, System.currentTimeMillis())
-
-        val location = currentLocationOnce(context, LOCATION_TIMEOUT_MS)
-        if (location == null) {
-            Log.w(TAG, "No se pudo obtener la ubicación")
-            return Result.failure()
-        }
-
-        // Si el coche se reconecta durante la espera, AutoParkScheduler.cancel() interrumpe aquí.
-        delay(DEBOUNCE_MS)
-
-        (context as WhereIsMyCarApp).parkingRepository.save(
-            latitude = location.latitude,
-            longitude = location.longitude,
-            accuracyMeters = location.accuracyMeters,
-            savedAtMillis = disconnectedAt,
-        )
-        Log.d(TAG, "Aparcamiento guardado: ${location.latitude}, ${location.longitude} (±${location.accuracyMeters} m)")
-        return Result.success()
     }
 
-    companion object {
-        const val KEY_DISCONNECTED_AT = "disconnected_at"
+    /** Solo se usa en Android 11 o anterior, donde el trabajo urgente se ejecuta como servicio en primer plano. */
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val manager = applicationContext.getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "Aparcamiento automático", NotificationManager.IMPORTANCE_LOW),
+            )
+        }
+        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setContentTitle("Guardando dónde has aparcado…")
+            .setOngoing(true)
+            .build()
+        return ForegroundInfo(NOTIFICATION_ID, notification)
+    }
+
+    private companion object {
         const val LOCATION_TIMEOUT_MS = 20_000L
-        const val DEBOUNCE_MS = 60_000L
-        private const val TAG = "AutoParkWorker"
+        const val CHANNEL_ID = "auto_park"
+        const val NOTIFICATION_ID = 1001
     }
 }
+
+class AutoParkSaveWorker(
+    appContext: Context,
+    params: WorkerParameters,
+) : CoroutineWorker(appContext, params) {
+
+    override suspend fun doWork(): Result {
+        val latitude = inputData.getDouble(KEY_LATITUDE, Double.NaN)
+        val longitude = inputData.getDouble(KEY_LONGITUDE, Double.NaN)
+        if (latitude.isNaN() || longitude.isNaN()) return Result.failure()
+        val accuracy = inputData.getFloat(KEY_ACCURACY, -1f).takeIf { it >= 0f }
+
+        (applicationContext as WhereIsMyCarApp).parkingRepository.save(
+            latitude = latitude,
+            longitude = longitude,
+            accuracyMeters = accuracy,
+            savedAtMillis = inputData.getLong(KEY_DISCONNECTED_AT, System.currentTimeMillis()),
+        )
+        AutoParkLog(applicationContext).add(
+            "✔ Aparcamiento guardado: %.5f, %.5f".format(Locale.US, latitude, longitude),
+        )
+        return Result.success()
+    }
+}
+
+const val SAVE_DELAY_SECONDS = 60L
 
 object AutoParkScheduler {
     private const val UNIQUE_WORK_NAME = "auto_park_on_disconnect"
 
     fun schedule(context: Context, disconnectedAt: Long) {
-        val request = OneTimeWorkRequestBuilder<AutoParkWorker>()
-            .setInputData(workDataOf(AutoParkWorker.KEY_DISCONNECTED_AT to disconnectedAt))
+        val locate = OneTimeWorkRequestBuilder<AutoParkLocationWorker>()
+            .setInputData(workDataOf(KEY_DISCONNECTED_AT to disconnectedAt))
+            // Urgente: que Android no lo retrase. Si se agota la cuota, se ejecuta como normal.
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .build()
+        val save = OneTimeWorkRequestBuilder<AutoParkSaveWorker>()
+            .setInitialDelay(SAVE_DELAY_SECONDS, TimeUnit.SECONDS)
             .build()
         WorkManager.getInstance(context)
-            .enqueueUniqueWork(UNIQUE_WORK_NAME, ExistingWorkPolicy.REPLACE, request)
+            .beginUniqueWork(UNIQUE_WORK_NAME, ExistingWorkPolicy.REPLACE, locate)
+            .then(save)
+            .enqueue()
     }
 
     fun cancel(context: Context) {
