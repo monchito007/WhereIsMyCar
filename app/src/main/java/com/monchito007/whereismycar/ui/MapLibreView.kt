@@ -2,6 +2,9 @@ package com.monchito007.whereismycar.ui
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
@@ -19,12 +22,14 @@ import com.monchito007.whereismycar.data.ParkedLocation
 import com.monchito007.whereismycar.data.ParkingHistoryEntry
 import com.monchito007.whereismycar.location.UserLocation
 import kotlin.math.roundToInt
+import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.maps.widgets.CompassView
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory.circleColor
@@ -54,7 +59,7 @@ private const val USER_LAYER = "user-layer"
 private const val CAR_SOURCE = "car-source"
 private const val CAR_LAYER = "car-layer"
 private const val CAR_ICON = "car-icon"
-private const val CAR_ICON_SIZE_DP = 42
+internal const val CAR_ICON_SIZE_DP = 42
 private const val HISTORY_SOURCE = "history-source"
 private const val HISTORY_LAYER = "history-layer"
 
@@ -68,6 +73,94 @@ private class MapHandle {
     var requestedStyle: MapStyle? = null
     var historyLocation: ParkingHistoryEntry? = null
     var centeredHistoryId: Long? = null
+    var compassPosition: CompassPosition? = null
+}
+
+/**
+ * Dónde colocar la brújula, en píxeles relativos al mapa: [topPx] es el borde superior
+ * y [centerFromEndPx] la distancia desde el borde derecho hasta el centro de la brújula.
+ */
+data class CompassPosition(val topPx: Int, val centerFromEndPx: Int)
+
+/**
+ * Zona del mapa tapada por otros elementos (barra de estado, botones, tarjetas), en píxeles
+ * desde cada borde. Los centrados de cámara se hacen en el hueco que queda libre.
+ *
+ * @param marginPx margen extra para que los marcadores no queden pegados al borde visible.
+ * @param markerHeightPx alto del icono del coche, que sobresale hacia arriba desde su punto.
+ */
+data class MapViewport(
+    val leftPx: Int = 0,
+    val topPx: Int = 0,
+    val rightPx: Int = 0,
+    val bottomPx: Int = 0,
+    val marginPx: Int = 0,
+    val markerHeightPx: Int = 0,
+)
+
+/**
+ * Viewport vacío: centra en el centro exacto de la pantalla, sin descontar lo que tapan botones
+ * y tarjetas. Además anula el padding que haya dejado un encuadre anterior.
+ */
+private val FULL_SCREEN = MapViewport()
+
+/** Centra la cámara en un punto, en el centro de la zona visible del mapa ([viewport]). */
+private fun MapLibreMap.easeToPoint(target: LatLng, zoom: Double, viewport: MapViewport) {
+    easeCamera(
+        CameraUpdateFactory.newCameraPosition(
+            CameraPosition.Builder()
+                .target(target)
+                .zoom(zoom)
+                .padding(
+                    viewport.leftPx.toDouble(),
+                    viewport.topPx.toDouble(),
+                    viewport.rightPx.toDouble(),
+                    viewport.bottomPx.toDouble(),
+                )
+                .build(),
+        ),
+    )
+}
+
+/** Encuadra varios puntos dentro de la zona visible, dejando sitio para el icono del coche. */
+private fun MapLibreMap.easeToBounds(bounds: LatLngBounds, viewport: MapViewport) {
+    with(viewport) {
+        easeCamera(
+            CameraUpdateFactory.newLatLngBounds(
+                bounds,
+                leftPx + marginPx,
+                topPx + marginPx + markerHeightPx,
+                rightPx + marginPx,
+                bottomPx + marginPx,
+            ),
+        )
+    }
+}
+
+private fun applyCompassPosition(map: MapLibreMap, mapView: MapView, position: CompassPosition?) {
+    position ?: return
+    // La vista de la brújula es más grande que su imagen: usar su ancho real si ya está medida.
+    val compassView = mapView.findCompassView()
+    val compassWidth = compassView?.width?.takeIf { it > 0 }
+        ?: map.uiSettings.compassImage?.intrinsicWidth
+        ?: 0
+    val endMargin = (position.centerFromEndPx - compassWidth / 2).coerceAtLeast(0)
+    map.uiSettings.compassGravity = Gravity.TOP or Gravity.END
+    map.uiSettings.setCompassMargins(0, position.topPx, endMargin, 0)
+    if (compassView != null && compassView.width == 0) {
+        // Aún no medida: recolocar cuando lo esté.
+        compassView.post { if (compassView.width > 0) applyCompassPosition(map, mapView, position) }
+    }
+}
+
+private fun View.findCompassView(): CompassView? {
+    if (this is CompassView) return this
+    if (this is ViewGroup) {
+        for (i in 0 until childCount) {
+            getChildAt(i).findCompassView()?.let { return it }
+        }
+    }
+    return null
 }
 
 @Composable
@@ -79,6 +172,8 @@ fun ParkingMap(
     cameraCommand: CameraCommand?,
     onCameraCommandConsumed: () -> Unit,
     modifier: Modifier = Modifier,
+    compassPosition: CompassPosition? = null,
+    viewport: MapViewport = MapViewport(),
 ) {
     val context = LocalContext.current
     val handle = remember { MapHandle() }
@@ -128,6 +223,7 @@ fun ParkingMap(
                 handle.map = map
                 map.uiSettings.isAttributionEnabled = true
                 map.uiSettings.isLogoEnabled = true
+                applyCompassPosition(map, mapView, handle.compassPosition)
                 loadMapStyle(handle, map, handle.desiredStyle, mapView.context)
             }
             mapView
@@ -140,6 +236,10 @@ fun ParkingMap(
             handle.historyLocation = historyLocation
             applyLocations(handle)
             val map = handle.map
+            if (compassPosition != handle.compassPosition) {
+                handle.compassPosition = compassPosition
+                map?.let { applyCompassPosition(it, mapView, compassPosition) }
+            }
             if (map != null && handle.requestedStyle != mapStyle) {
                 loadMapStyle(handle, map, mapStyle, mapView.context)
             }
@@ -148,22 +248,13 @@ fun ParkingMap(
             } else if (map != null && handle.centeredHistoryId != historyLocation.id) {
                 handle.centeredHistoryId = historyLocation.id
                 handle.didCenterOnUser = true
-                map.easeCamera(
-                    CameraUpdateFactory.newLatLngZoom(
-                        LatLng(historyLocation.latitude, historyLocation.longitude),
-                        17.0,
-                    ),
-                )
+                map.easeToPoint(LatLng(historyLocation.latitude, historyLocation.longitude), 17.0, FULL_SCREEN)
             }
             if (map != null && cameraCommand != null) {
                 when (cameraCommand) {
+                    // Botón "Mi posición": centro exacto de la pantalla.
                     CameraCommand.CenterOnUser -> userLocation?.let {
-                        map.easeCamera(
-                            CameraUpdateFactory.newLatLngZoom(
-                                LatLng(it.latitude, it.longitude),
-                                17.0,
-                            ),
-                        )
+                        map.easeToPoint(LatLng(it.latitude, it.longitude), 17.0, FULL_SCREEN)
                     }
                     CameraCommand.FitBoth -> {
                         val user = userLocation
@@ -173,26 +264,16 @@ fun ParkingMap(
                                 .include(LatLng(user.latitude, user.longitude))
                                 .include(LatLng(parked.latitude, parked.longitude))
                                 .build()
-                            map.easeCamera(CameraUpdateFactory.newLatLngBounds(bounds, 140))
+                            map.easeToBounds(bounds, viewport)
                         } else if (parked != null) {
-                            map.easeCamera(
-                                CameraUpdateFactory.newLatLngZoom(
-                                    LatLng(parked.latitude, parked.longitude),
-                                    17.0,
-                                ),
-                            )
+                            map.easeToPoint(LatLng(parked.latitude, parked.longitude), 17.0, viewport)
                         }
                     }
                 }
                 onCameraCommandConsumed()
             } else if (!handle.didCenterOnUser && userLocation != null && map != null) {
                 handle.didCenterOnUser = true
-                map.easeCamera(
-                    CameraUpdateFactory.newLatLngZoom(
-                        LatLng(userLocation.latitude, userLocation.longitude),
-                        16.0,
-                    ),
-                )
+                map.easeToPoint(LatLng(userLocation.latitude, userLocation.longitude), 16.0, FULL_SCREEN)
             }
         },
     )
