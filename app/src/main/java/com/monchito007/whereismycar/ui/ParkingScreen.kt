@@ -73,8 +73,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,6 +95,7 @@ import com.monchito007.whereismycar.location.Geo
 import com.monchito007.whereismycar.location.NavigationIntents
 import java.io.File
 import java.util.Date
+import kotlin.math.roundToInt
 
 private val locationPermissions = arrayOf(
     Manifest.permission.ACCESS_FINE_LOCATION,
@@ -436,7 +441,28 @@ fun ParkingScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { _ ->
-        Box(modifier = Modifier.fillMaxSize()) {
+        // La brújula del mapa se coloca justo debajo del último botón del lateral derecho.
+        val density = LocalDensity.current
+        var mapBounds by remember { mutableStateOf<Rect?>(null) }
+        var sideButtonsBounds by remember { mutableStateOf<Rect?>(null) }
+        val compassPosition = remember(mapBounds, sideButtonsBounds, density) {
+            val map = mapBounds ?: return@remember null
+            val buttons = sideButtonsBounds ?: return@remember null
+            with(density) {
+                CompassPosition(
+                    topPx = (buttons.bottom - map.top + 8.dp.toPx()).roundToInt(),
+                    // Todos los botones tienen el mismo ancho, así que el centro de la columna
+                    // es el eje de los botones (incluye su zona táctil de 48 dp).
+                    centerFromEndPx = (map.right - buttons.center.x).roundToInt(),
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { mapBounds = it.boundsInRoot() },
+        ) {
             ParkingMap(
                 mapStyle = state.mapStyle,
                 userLocation = state.userLocation,
@@ -445,30 +471,15 @@ fun ParkingScreen(
                 cameraCommand = cameraCommand,
                 onCameraCommandConsumed = { cameraCommand = null },
                 modifier = Modifier.fillMaxSize(),
+                compassPosition = compassPosition,
             )
-
-            Card(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                ),
-            ) {
-                Text(
-                    text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                )
-            }
 
             Column(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
-                    .padding(end = 16.dp, top = 8.dp),
+                    .padding(end = 16.dp, top = 8.dp)
+                    .onGloballyPositioned { sideButtonsBounds = it.boundsInRoot() },
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {

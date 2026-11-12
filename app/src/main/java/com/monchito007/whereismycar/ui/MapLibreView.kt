@@ -2,6 +2,9 @@ package com.monchito007.whereismycar.ui
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
@@ -25,6 +28,7 @@ import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.maps.widgets.CompassView
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory.circleColor
@@ -68,6 +72,39 @@ private class MapHandle {
     var requestedStyle: MapStyle? = null
     var historyLocation: ParkingHistoryEntry? = null
     var centeredHistoryId: Long? = null
+    var compassPosition: CompassPosition? = null
+}
+
+/**
+ * Dónde colocar la brújula, en píxeles relativos al mapa: [topPx] es el borde superior
+ * y [centerFromEndPx] la distancia desde el borde derecho hasta el centro de la brújula.
+ */
+data class CompassPosition(val topPx: Int, val centerFromEndPx: Int)
+
+private fun applyCompassPosition(map: MapLibreMap, mapView: MapView, position: CompassPosition?) {
+    position ?: return
+    // La vista de la brújula es más grande que su imagen: usar su ancho real si ya está medida.
+    val compassView = mapView.findCompassView()
+    val compassWidth = compassView?.width?.takeIf { it > 0 }
+        ?: map.uiSettings.compassImage?.intrinsicWidth
+        ?: 0
+    val endMargin = (position.centerFromEndPx - compassWidth / 2).coerceAtLeast(0)
+    map.uiSettings.compassGravity = Gravity.TOP or Gravity.END
+    map.uiSettings.setCompassMargins(0, position.topPx, endMargin, 0)
+    if (compassView != null && compassView.width == 0) {
+        // Aún no medida: recolocar cuando lo esté.
+        compassView.post { if (compassView.width > 0) applyCompassPosition(map, mapView, position) }
+    }
+}
+
+private fun View.findCompassView(): CompassView? {
+    if (this is CompassView) return this
+    if (this is ViewGroup) {
+        for (i in 0 until childCount) {
+            getChildAt(i).findCompassView()?.let { return it }
+        }
+    }
+    return null
 }
 
 @Composable
@@ -79,6 +116,7 @@ fun ParkingMap(
     cameraCommand: CameraCommand?,
     onCameraCommandConsumed: () -> Unit,
     modifier: Modifier = Modifier,
+    compassPosition: CompassPosition? = null,
 ) {
     val context = LocalContext.current
     val handle = remember { MapHandle() }
@@ -128,6 +166,7 @@ fun ParkingMap(
                 handle.map = map
                 map.uiSettings.isAttributionEnabled = true
                 map.uiSettings.isLogoEnabled = true
+                applyCompassPosition(map, mapView, handle.compassPosition)
                 loadMapStyle(handle, map, handle.desiredStyle, mapView.context)
             }
             mapView
@@ -140,6 +179,10 @@ fun ParkingMap(
             handle.historyLocation = historyLocation
             applyLocations(handle)
             val map = handle.map
+            if (compassPosition != handle.compassPosition) {
+                handle.compassPosition = compassPosition
+                map?.let { applyCompassPosition(it, mapView, compassPosition) }
+            }
             if (map != null && handle.requestedStyle != mapStyle) {
                 loadMapStyle(handle, map, mapStyle, mapView.context)
             }
