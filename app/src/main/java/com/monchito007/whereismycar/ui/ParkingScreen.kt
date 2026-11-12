@@ -458,6 +458,25 @@ fun ParkingScreen(
             }
         }
 
+        // Zona del mapa realmente visible: sin la barra de estado, la columna de botones de la
+        // derecha ni las tarjetas de abajo. Los centrados de cámara se hacen dentro de ella.
+        var bottomPanelBounds by remember { mutableStateOf<Rect?>(null) }
+        val viewport = remember(mapBounds, sideButtonsBounds, bottomPanelBounds, density) {
+            val map = mapBounds ?: return@remember MapViewport()
+            val buttons = sideButtonsBounds
+            val bottomPanel = bottomPanelBounds?.takeIf { it.height > 0f }
+            with(density) {
+                MapViewport(
+                    leftPx = 0,
+                    topPx = ((buttons?.top ?: map.top) - map.top).roundToInt().coerceAtLeast(0),
+                    rightPx = (buttons?.let { map.right - it.left } ?: 0f).roundToInt().coerceAtLeast(0),
+                    bottomPx = (bottomPanel?.let { map.bottom - it.top } ?: 0f).roundToInt().coerceAtLeast(0),
+                    marginPx = 24.dp.roundToPx(),
+                    markerHeightPx = CAR_ICON_SIZE_DP.dp.roundToPx(),
+                )
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -472,6 +491,7 @@ fun ParkingScreen(
                 onCameraCommandConsumed = { cameraCommand = null },
                 modifier = Modifier.fillMaxSize(),
                 compassPosition = compassPosition,
+                viewport = viewport,
             )
 
             Column(
@@ -521,7 +541,8 @@ fun ParkingScreen(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                    .onGloballyPositioned { bottomPanelBounds = it.boundsInRoot() },
             ) {
                 if (!state.hasLocationPermission) {
                     PermissionCard(
