@@ -7,6 +7,17 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Aparcamiento automático: leer la ubicación con la app cerrada -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- Aparcamiento automático: detectar la desconexión del coche -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <uses-feature
+        android:name="android.hardware.bluetooth"
+        android:required="false" />
 
     <uses-feature
         android:glEsVersion="0x00020000"
@@ -70,6 +81,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Los ACL_* son broadcasts protegidos del sistema: solo el sistema puede enviarlos.
+             Están exentos de las restricciones de broadcasts implícitos de Android 8+. -->
+        <receiver
+            android:name=".bluetooth.CarBluetoothReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

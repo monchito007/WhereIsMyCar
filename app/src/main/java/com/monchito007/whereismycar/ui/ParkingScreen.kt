@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -99,6 +100,7 @@ private val locationPermissions = arrayOf(
 
 @Composable
 fun ParkingScreen(
+    onOpenAutoParkSettings: () -> Unit,
     viewModel: ParkingViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -486,6 +488,14 @@ fun ParkingScreen(
                             onClick = {
                                 showMenu = false
                                 showHistory = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.auto_park_title)) },
+                            leadingIcon = { Icon(Icons.Filled.Bluetooth, contentDescription = null) },
+                            onClick = {
+                                showMenu = false
+                                onOpenAutoParkSettings()
                             },
                         )
                     }

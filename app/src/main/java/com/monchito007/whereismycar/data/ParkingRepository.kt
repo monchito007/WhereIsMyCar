@@ -17,12 +17,17 @@ class ParkingRepository(
     val parkedLocation: Flow<ParkedLocation?> = parkedLocationDao.observe()
     val parkingPhotos: Flow<List<ParkingPhoto>> = parkingPhotoDao.observe()
 
-    suspend fun save(latitude: Double, longitude: Double, accuracyMeters: Float?) {
+    suspend fun save(
+        latitude: Double,
+        longitude: Double,
+        accuracyMeters: Float?,
+        savedAtMillis: Long = System.currentTimeMillis(),
+    ) {
         replaceCurrentParking(
             ParkedLocation(
                 latitude = latitude,
                 longitude = longitude,
-                savedAtMillis = System.currentTimeMillis(),
+                savedAtMillis = savedAtMillis,
                 accuracyMeters = accuracyMeters,
             ),
         )

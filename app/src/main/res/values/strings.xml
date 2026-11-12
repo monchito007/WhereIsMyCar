@@ -61,4 +61,27 @@
     <string name="photos">Fotos</string>
     <string name="pick_gallery">Galería</string>
     <string name="camera_permission_needed">Se necesita permiso de cámara para hacer fotos.</string>
+    <string name="back">Volver</string>
+    <!-- Aparcamiento automático por Bluetooth -->
+    <string name="auto_park_title">Aparcamiento automático</string>
+    <string name="auto_park_intro">Elige tu coche y la app guardará dónde has aparcado cuando el móvil se desconecte de su Bluetooth.</string>
+    <string name="auto_park_permissions">Permisos</string>
+    <string name="auto_park_perm_bluetooth">Dispositivos cercanos (Bluetooth)</string>
+    <string name="auto_park_perm_location">Ubicación precisa</string>
+    <string name="auto_park_perm_background">Ubicación en segundo plano</string>
+    <string name="auto_park_perm_background_hint">Elige \"Permitir todo el tiempo\" para poder guardar con la app cerrada.</string>
+    <string name="auto_park_no_dialog">¿No aparece el diálogo? Abrir ajustes de la app</string>
+    <string name="auto_park_grant">Conceder</string>
+    <string name="auto_park_granted">Concedido</string>
+    <string name="auto_park_pending">Pendiente</string>
+    <string name="auto_park_your_car">Tu coche</string>
+    <string name="auto_park_devices_no_permission">Concede el permiso de Bluetooth para ver tus dispositivos emparejados.</string>
+    <string name="auto_park_devices_unsupported">Este dispositivo no tiene Bluetooth.</string>
+    <string name="auto_park_devices_bt_off">Activa el Bluetooth para ver tus dispositivos emparejados.</string>
+    <string name="auto_park_devices_empty">No hay dispositivos emparejados. Empareja el móvil con el coche desde los ajustes de Bluetooth.</string>
+    <string name="auto_park_refresh">Actualizar lista</string>
+    <string name="auto_park_switch_title">Guardar al desconectar</string>
+    <string name="auto_park_switch_label">Guardar cuando \"%1$s\" se desconecte</string>
+    <string name="auto_park_choose_car_first">Primero elige tu coche</string>
+    <string name="auto_park_missing_permissions">Faltan permisos: el aparcamiento automático no funcionará hasta que los concedas.</string>
 </resources>

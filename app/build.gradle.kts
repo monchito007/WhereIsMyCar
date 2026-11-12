@@ -53,6 +53,8 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.play.services.location)
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.datastore.preferences)
     implementation(libs.maplibre.android)
     implementation("io.coil-kt:coil-compose:2.7.0")
     testImplementation(libs.junit)
