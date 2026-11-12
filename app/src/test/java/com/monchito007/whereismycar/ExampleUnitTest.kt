@@ -1,17 +1,20 @@
 package com.monchito007.whereismycar
 
+import com.monchito007.whereismycar.location.Geo
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-import org.junit.Assert.*
-
-/**
- * Example local unit test, which will execute on the development machine (host).
- *
- * See [testing documentation](http://d.android.com/tools/testing).
- */
 class ExampleUnitTest {
     @Test
-    fun addition_isCorrect() {
-        assertEquals(4, 2 + 2)
+    fun haversine_knownDistance() {
+        val meters = Geo.haversineMeters(40.4168, -3.7038, 40.4178, -3.7038)
+        assertTrue(meters in 100.0..130.0)
+    }
+
+    @Test
+    fun walkingMinutes_scalesWithDistance() {
+        assertEquals(0, Geo.walkingMinutes(0.0))
+        assertTrue(Geo.walkingMinutes(400.0) >= 1)
     }
 }

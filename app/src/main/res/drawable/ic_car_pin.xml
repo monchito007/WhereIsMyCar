@@ -1,0 +1,40 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Soft shadow -->
+    <path
+        android:pathData="M24,3C15.7,3 9,9.7 9,18C9,29 24,45 24,45C24,45 39,29 39,18C39,9.7 32.3,3 24,3Z"
+        android:strokeColor="#000000"
+        android:strokeAlpha="0.10"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M24,3C15.7,3 9,9.7 9,18C9,29 24,45 24,45C24,45 39,29 39,18C39,9.7 32.3,3 24,3Z"
+        android:strokeColor="#000000"
+        android:strokeAlpha="0.14"
+        android:strokeWidth="3.5"
+        android:strokeLineJoin="round" />
+    <!-- Pin with white border -->
+    <path
+        android:fillColor="#D32F2F"
+        android:pathData="M24,3C15.7,3 9,9.7 9,18C9,29 24,45 24,45C24,45 39,29 39,18C39,9.7 32.3,3 24,3Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineJoin="round" />
+    <!-- White disc -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12.5,18a11.5,11.5 0 1,1 23,0a11.5,11.5 0 1,1 -23,0z" />
+    <!-- Car -->
+    <group
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:translateX="14.4"
+        android:translateY="7.6">
+        <path
+            android:fillColor="#D32F2F"
+            android:pathData="M18.92,6.01C18.72,5.42 18.16,5 17.5,5h-11c-0.66,0 -1.21,0.42 -1.42,1.01L3,12v8c0,0.55 0.45,1 1,1h1c0.55,0 1,-0.45 1,-1v-1h12v1c0,0.55 0.45,1 1,1h1c0.55,0 1,-0.45 1,-1v-8L18.92,6.01zM6.5,16C5.67,16 5,15.33 5,14.5S5.67,13 6.5,13S8,13.67 8,14.5S7.33,16 6.5,16zM17.5,16c-0.83,0 -1.5,-0.67 -1.5,-1.5s0.67,-1.5 1.5,-1.5s1.5,0.67 1.5,1.5S18.33,16 17.5,16zM5,11l1.5,-4.5h11L19,11H5z" />
+    </group>
+</vector>
