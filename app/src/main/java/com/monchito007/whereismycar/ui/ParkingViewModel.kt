@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.maplibre.android.camera.CameraPosition
 
 data class ParkingUiState(
     val hasLocationPermission: Boolean = false,
@@ -41,6 +42,12 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
 
     private val _uiState = MutableStateFlow(ParkingUiState(mapStyle = savedMapStyle()))
     val uiState: StateFlow<ParkingUiState> = _uiState.asStateFlow()
+
+    /**
+     * Última posición de la cámara del mapa. El mapa se destruye al abrir otra pantalla
+     * (p. ej. "Aparcamiento automático") y al girar el móvil; con esto vuelve donde estaba.
+     */
+    var lastCameraPosition: CameraPosition? = null
 
     init {
         viewModelScope.launch {

@@ -1,6 +1,7 @@
 package com.monchito007.whereismycar.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -65,6 +66,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,12 +82,14 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -127,6 +131,21 @@ fun ParkingScreen(
     var historyEntryIdToDelete by rememberSaveable { mutableStateOf<Long?>(null) }
     var selectedHistoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     val selectedHistory = state.history.firstOrNull { it.id == selectedHistoryId }
+
+    // El mapa ocupa toda la pantalla por detrás de la barra de estado: sus iconos deben
+    // contrastar con el estilo del mapa, no con el tema del sistema.
+    val view = LocalView.current
+    val darkMap = state.mapStyle.isDark
+    DisposableEffect(view, darkMap) {
+        val window = (view.context as? Activity)?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+        val previous = controller?.isAppearanceLightStatusBars
+        controller?.isAppearanceLightStatusBars = !darkMap
+        onDispose {
+            // Al salir del mapa, dejar los iconos como estaban (según el tema del sistema).
+            if (controller != null && previous != null) controller.isAppearanceLightStatusBars = previous
+        }
+    }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture(),
@@ -494,6 +513,8 @@ fun ParkingScreen(
                 modifier = Modifier.fillMaxSize(),
                 compassPosition = compassPosition,
                 viewport = viewport,
+                initialCameraPosition = viewModel.lastCameraPosition,
+                onCameraIdle = { viewModel.lastCameraPosition = it },
             )
 
             Column(

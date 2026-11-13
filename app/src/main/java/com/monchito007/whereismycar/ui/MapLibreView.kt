@@ -9,7 +9,9 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -46,12 +48,13 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 
-enum class MapStyle(val url: String, @param:StringRes val labelRes: Int) {
+/** @param isDark mapa de fondo oscuro: los iconos de la barra de estado deben ser claros. */
+enum class MapStyle(val url: String, @param:StringRes val labelRes: Int, val isDark: Boolean = false) {
     LIBERTY("https://tiles.openfreemap.org/styles/liberty", R.string.map_style_liberty),
     BRIGHT("https://tiles.openfreemap.org/styles/bright", R.string.map_style_bright),
     POSITRON("https://tiles.openfreemap.org/styles/positron", R.string.map_style_positron),
-    DARK("https://tiles.openfreemap.org/styles/dark", R.string.map_style_dark),
-    FIORD("https://tiles.openfreemap.org/styles/fiord", R.string.map_style_fiord),
+    DARK("https://tiles.openfreemap.org/styles/dark", R.string.map_style_dark, isDark = true),
+    FIORD("https://tiles.openfreemap.org/styles/fiord", R.string.map_style_fiord, isDark = true),
 }
 
 private const val USER_SOURCE = "user-source"
@@ -174,9 +177,15 @@ fun ParkingMap(
     modifier: Modifier = Modifier,
     compassPosition: CompassPosition? = null,
     viewport: MapViewport = MapViewport(),
+    initialCameraPosition: CameraPosition? = null,
+    onCameraIdle: (CameraPosition) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val handle = remember { MapHandle() }
+    val currentOnCameraIdle by rememberUpdatedState(onCameraIdle)
+    val handle = remember {
+        // Si venimos de otra pantalla con una cámara guardada, no volver a centrar en el usuario.
+        MapHandle().apply { didCenterOnUser = initialCameraPosition != null }
+    }
     val mapView = remember {
         MapView(context).apply { onCreate(null) }
     }
@@ -221,6 +230,8 @@ fun ParkingMap(
             handle.desiredStyle = mapStyle
             mapView.getMapAsync { map ->
                 handle.map = map
+                initialCameraPosition?.let { map.cameraPosition = it }
+                map.addOnCameraIdleListener { currentOnCameraIdle(map.cameraPosition) }
                 map.uiSettings.isAttributionEnabled = true
                 map.uiSettings.isLogoEnabled = true
                 applyCompassPosition(map, mapView, handle.compassPosition)
