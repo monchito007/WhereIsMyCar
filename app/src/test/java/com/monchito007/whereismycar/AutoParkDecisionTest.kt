@@ -54,4 +54,12 @@ class AutoParkDecisionTest {
     fun `null device address is ignored`() {
         assertEquals(AutoParkAction.IGNORE, decideAutoParkAction(CarConnectionEvent.DISCONNECTED, null, activeConfig))
     }
+
+    @Test
+    fun `disconnect caused by turning off phone bluetooth is ignored`() {
+        assertEquals(
+            AutoParkAction.IGNORE,
+            decideAutoParkAction(CarConnectionEvent.DISCONNECTED, car, activeConfig, phoneBluetoothOn = false)
+        )
+    }
 }

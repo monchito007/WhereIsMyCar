@@ -17,6 +17,8 @@ class ParkingRepository(
     val parkedLocation: Flow<ParkedLocation?> = parkedLocationDao.observe()
     val parkingPhotos: Flow<List<ParkingPhoto>> = parkingPhotoDao.observe()
 
+    suspend fun currentParking(): ParkedLocation? = parkedLocationDao.get()
+
     suspend fun save(
         latitude: Double,
         longitude: Double,

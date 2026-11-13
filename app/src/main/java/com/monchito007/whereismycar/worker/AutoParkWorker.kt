@@ -16,6 +16,8 @@ import androidx.work.workDataOf
 import com.monchito007.whereismycar.WhereIsMyCarApp
 import com.monchito007.whereismycar.bluetooth.AutoParkLog
 import com.monchito007.whereismycar.bluetooth.AutoParkPermissions
+import com.monchito007.whereismycar.bluetooth.AutoParkRules
+import com.monchito007.whereismycar.bluetooth.isPhoneBluetoothOn
 import com.monchito007.whereismycar.location.currentLocationOnce
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -50,16 +52,40 @@ class AutoParkLocationWorker(
                 log.add("ERROR: falta el permiso de ubicación \"Permitir todo el tiempo\"")
                 return Result.failure()
             }
-            val location = currentLocationOnce(applicationContext, LOCATION_TIMEOUT_MS)
-            if (location == null) {
+            val disconnectedAt = inputData.getLong(KEY_DISCONNECTED_AT, System.currentTimeMillis())
+            val fix = currentLocationOnce(applicationContext, LOCATION_TIMEOUT_MS)
+            if (fix == null) {
                 log.add("ERROR: no se pudo obtener la ubicación (¿GPS desactivado?)")
                 return Result.failure()
             }
+            val offsetSeconds = (fix.fixTimeMillis - disconnectedAt) / 1000
+            val source = if (fix.fromLastKnown) "última conocida" else "actual"
+            when (AutoParkRules.checkFixTime(fix.fixTimeMillis, disconnectedAt)) {
+                AutoParkRules.FixCheck.TOO_OLD -> {
+                    log.add(
+                        "ERROR: la única ubicación disponible ($source) es de ${-offsetSeconds} s antes " +
+                            "de desconectar; podría ser de cuando aún circulabas. No se guarda",
+                    )
+                    return Result.failure()
+                }
+                AutoParkRules.FixCheck.TOO_LATE -> {
+                    log.add(
+                        "ERROR: la ubicación llegó ${offsetSeconds} s después de desconectar " +
+                            "(Android retrasó el trabajo); ya no estarías junto al coche. No se guarda",
+                    )
+                    return Result.failure()
+                }
+                AutoParkRules.FixCheck.OK -> Unit
+            }
+            val location = fix.location
             val accuracy = location.accuracyMeters?.let { "±${it.toInt()} m" } ?: "precisión desconocida"
-            log.add("Ubicación obtenida ($accuracy). Se guardará en ${SAVE_DELAY_SECONDS} s si el coche no se reconecta")
+            log.add(
+                "Ubicación $source obtenida ($accuracy, ${offsetSeconds} s respecto a la desconexión). " +
+                    "Se guardará en ${SAVE_DELAY_SECONDS} s si el coche no se reconecta",
+            )
             return Result.success(
                 workDataOf(
-                    KEY_DISCONNECTED_AT to inputData.getLong(KEY_DISCONNECTED_AT, System.currentTimeMillis()),
+                    KEY_DISCONNECTED_AT to disconnectedAt,
                     KEY_LATITUDE to location.latitude,
                     KEY_LONGITUDE to location.longitude,
                     KEY_ACCURACY to (location.accuracyMeters ?: -1f),
@@ -105,13 +131,45 @@ class AutoParkSaveWorker(
         if (latitude.isNaN() || longitude.isNaN()) return Result.failure()
         val accuracy = inputData.getFloat(KEY_ACCURACY, -1f).takeIf { it >= 0f }
 
-        (applicationContext as WhereIsMyCarApp).parkingRepository.save(
+        val disconnectedAt = inputData.getLong(KEY_DISCONNECTED_AT, System.currentTimeMillis())
+        val log = AutoParkLog(applicationContext)
+
+        // Con el Bluetooth del móvil apagado no nos enteraríamos de una reconexión del coche,
+        // así que no sabemos si de verdad has aparcado.
+        if (!isPhoneBluetoothOn(applicationContext)) {
+            log.add("No se guarda: el Bluetooth del móvil está apagado y no se puede confirmar que hayas aparcado")
+            return Result.success()
+        }
+
+        val repository = (applicationContext as WhereIsMyCarApp).parkingRepository
+        val existing = repository.currentParking()
+        val decision = AutoParkRules.checkExistingParking(
+            existingSavedAtMillis = existing?.savedAtMillis,
+            existingLatitude = existing?.latitude,
+            existingLongitude = existing?.longitude,
+            disconnectedAtMillis = disconnectedAt,
+            newLatitude = latitude,
+            newLongitude = longitude,
+        )
+        when (decision) {
+            AutoParkRules.ExistingParking.KEEP_SAVED_AFTER_DISCONNECT -> {
+                log.add("No se guarda: ya guardaste el aparcamiento a mano después de desconectar (se conservan fotos y nota)")
+                return Result.success()
+            }
+            AutoParkRules.ExistingParking.KEEP_SAME_PLACE -> {
+                log.add("No se guarda: ya hay un aparcamiento en este mismo sitio de hace unos minutos (se conservan fotos y nota)")
+                return Result.success()
+            }
+            AutoParkRules.ExistingParking.REPLACE -> Unit
+        }
+
+        repository.save(
             latitude = latitude,
             longitude = longitude,
             accuracyMeters = accuracy,
-            savedAtMillis = inputData.getLong(KEY_DISCONNECTED_AT, System.currentTimeMillis()),
+            savedAtMillis = disconnectedAt,
         )
-        AutoParkLog(applicationContext).add(
+        log.add(
             "✔ Aparcamiento guardado: %.5f, %.5f".format(Locale.US, latitude, longitude),
         )
         return Result.success()
